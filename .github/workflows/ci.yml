@@ -86,3 +86,40 @@ jobs:
       # list of failures, not just the first one.
       - name: Run test suite
         run: npm test
+
+  # ---------------------------------------------------------------------------
+  # Static analysis. Runs in parallel with the test job: a security finding and
+  # a failing test are independent signals, and we want both on every run rather
+  # than the first one masking the second.
+  # ---------------------------------------------------------------------------
+  slither:
+    name: Slither static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # fail-on: medium halts the build on any medium or high severity finding.
+      # Informational, low and optimization results are filtered by
+      # slither.config.json and appear in the log without blocking.
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.0
+        with:
+          node-version: 22
+          target: .
+          slither-config: slither.config.json
+          fail-on: medium

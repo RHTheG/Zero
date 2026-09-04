@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "Slither configuration for TaxToken.",
+    "",
+    "Policy: fail the build on MEDIUM or HIGH severity findings in our own code.",
+    "Informational, low and optimization findings are still reported in the job",
+    "log but do not block a merge.",
+    "",
+    "filter_paths excludes dependencies. OpenZeppelin v5 is widely audited and we",
+    "do not vendor-patch it, so its findings are noise we could not act on without",
+    "forking the library. Only contracts/ is treated as in scope.",
+    "",
+    "Two detectors are excluded, each justified below. Nothing that could mask a",
+    "real vulnerability in TaxToken.sol is excluded:",
+    "",
+    "  naming-convention - constructor parameters use the trailing-underscore",
+    "    style (name_, symbol_) to disambiguate from the ERC20 getters they feed.",
+    "    This is the OpenZeppelin house style and a deliberate readability choice.",
+    "",
+    "  solc-version - the compiler is pinned to an exact 0.8.24 rather than a",
+    "    floating caret range. Slither flags non-latest pins; an exact pin is the",
+    "    stronger supply-chain position, so the flag runs contrary to our intent."
+  ],
+
+  "filter_paths": "node_modules",
+  "exclude_dependencies": true,
+
+  "exclude_informational": true,
+  "exclude_low": true,
+  "exclude_optimization": true,
+  "exclude_medium": false,
+  "exclude_high": false,
+
+  "detectors_to_exclude": "naming-convention,solc-version",
+
+  "disable_color": true
+}

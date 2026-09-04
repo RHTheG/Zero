@@ -527,3 +527,348 @@ describe("TaxToken", function () {
     });
   });
 });
+
+/**
+ * Property-based / invariant tests.
+ *
+ * The unit suite above checks specific, hand-chosen scenarios. These generate
+ * randomised operation sequences and assert that the contract's core safety
+ * properties hold after EVERY step, not merely at the end.
+ *
+ * Randomness is seeded and the seed is reported on failure, so any counter-
+ * example reproduces deterministically.
+ */
+describe("TaxToken — invariants (property-based)", function () {
+  const NAME = "TaxToken";
+  const SYMBOL = "TTX";
+  const INITIAL_SUPPLY = 1_000_000n;
+  const TAX_BPS = 200n;
+  const MAX_TAX_BPS = 500n;
+  const BPS_DENOMINATOR = 10_000n;
+
+  /** mulberry32 — small, fast, deterministic. */
+  function makeRng(seed) {
+    let s = seed >>> 0;
+    return function next() {
+      s = (s + 0x6d2b79f5) >>> 0;
+      let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
+
+  /** Random BigInt in [1, max]. Returns 0n when max is 0. */
+  function randBig(rng, max) {
+    if (max <= 0n) return 0n;
+    // Draw across the full magnitude so both dust and near-total amounts occur.
+    const bits = max.toString(2).length;
+    let v = 0n;
+    for (let i = 0; i < bits; i += 30) {
+      v = (v << 30n) | BigInt(Math.floor(rng() * 2 ** 30));
+    }
+    const r = v % max;
+    return r === 0n ? 1n : r;
+  }
+
+  async function deployInvariantFixture() {
+    const signers = await ethers.getSigners();
+    const [owner, taxWallet, ...rest] = signers;
+
+    const TaxToken = await ethers.getContractFactory("TaxToken");
+    const token = await TaxToken.deploy(
+      NAME,
+      SYMBOL,
+      INITIAL_SUPPLY,
+      owner.address,
+      taxWallet.address,
+      TAX_BPS
+    );
+    await token.waitForDeployment();
+
+    const one = 10n ** (await token.decimals());
+    const players = rest.slice(0, 5);
+
+    // Seed the non-excluded actors from the owner. The owner is fee-excluded,
+    // so these transfers are untaxed and the amounts land exactly.
+    for (const a of players) {
+      await token.connect(owner).transfer(a.address, 10_000n * one);
+    }
+
+    // Every address that can ever hold a balance, for the conservation sum.
+    const holders = [owner, taxWallet, ...players];
+
+    return { token, owner, taxWallet, players, holders, one };
+  }
+
+  /** Sum of balances across every address that can hold tokens. */
+  async function sumBalances(token, holders) {
+    const balances = await Promise.all(holders.map((h) => token.balanceOf(h.address)));
+    return balances.reduce((acc, b) => acc + b, 0n);
+  }
+
+  /**
+   * Asserts every invariant that must hold at all times. `expectedSupply` is
+   * threaded through so deliberate burns can be accounted for.
+   */
+  async function assertInvariants(token, holders, expectedSupply, context) {
+    const [totalSupply, rate, cap] = await Promise.all([
+      token.totalSupply(),
+      token.taxRateBps(),
+      token.MAX_TAX_BPS(),
+    ]);
+
+    // Invariant 1 — no accidental mint or burn.
+    expect(totalSupply, `[${context}] totalSupply drifted`).to.equal(expectedSupply);
+
+    // Invariant 2 — conservation: every token is accounted for somewhere.
+    const sum = await sumBalances(token, holders);
+    expect(sum, `[${context}] balances do not sum to totalSupply`).to.equal(totalSupply);
+
+    // Invariant 3 — the tax cap is never breached, and the cap itself is fixed.
+    expect(rate, `[${context}] tax rate exceeded the hard cap`).to.be.lte(cap);
+    expect(cap, `[${context}] MAX_TAX_BPS mutated`).to.equal(MAX_TAX_BPS);
+  }
+
+  /** Custom errors the fuzzer may legitimately provoke; anything else is a bug. */
+  const EXPECTED_REVERTS = [
+    "NoChange",
+    "ZeroAddress",
+    "TaxRateExceedsCap",
+    "ERC20InsufficientBalance",
+    "ERC20InsufficientAllowance",
+    "OwnableUnauthorizedAccount",
+  ];
+
+  function isExpectedRevert(err) {
+    const text = `${err?.message ?? ""}${err?.shortMessage ?? ""}`;
+    return EXPECTED_REVERTS.some((name) => text.includes(name));
+  }
+
+  // -------------------------------------------------------------------------
+  it("Invariant 1: total supply is constant across arbitrary taxed and excluded transfers", async function () {
+    const { token, owner, taxWallet, players, holders } = await loadFixture(deployInvariantFixture);
+    const SEED = 0xc0ffee;
+    const rng = makeRng(SEED);
+    const initialSupply = await token.totalSupply();
+
+    for (let i = 0; i < 60; i++) {
+      const from = pick(rng, players);
+      const to = pick(rng, [...players, owner, taxWallet]);
+      const balance = await token.balanceOf(from.address);
+      if (balance === 0n) continue;
+
+      const roll = rng();
+
+      try {
+        if (roll < 0.65) {
+          // Plain transfer — taxed or exempt depending on current exclusions.
+          await token.connect(from).transfer(to.address, randBig(rng, balance));
+        } else if (roll < 0.8) {
+          // transferFrom path: allowance is spent for the FULL amount.
+          const amount = randBig(rng, balance);
+          const spender = pick(rng, players);
+          await token.connect(from).approve(spender.address, amount);
+          await token.connect(spender).transferFrom(from.address, to.address, amount);
+        } else if (roll < 0.9) {
+          // Churn the exclusion set so both tax paths are exercised.
+          const target = pick(rng, players);
+          const current = await token.isExcludedFromFee(target.address);
+          await token.connect(owner).setExcludedFromFee(target.address, !current);
+        } else {
+          // Churn the rate within the legal range, including 0 (tax disabled).
+          const newRate = BigInt(Math.floor(rng() * Number(MAX_TAX_BPS + 1n)));
+          const current = await token.taxRateBps();
+          if (newRate !== current) await token.connect(owner).setTaxRate(newRate);
+        }
+      } catch (err) {
+        if (!isExpectedRevert(err)) {
+          throw new Error(`seed=${SEED} step=${i} unexpected revert: ${err.message}`);
+        }
+      }
+
+      // Supply must be untouched by every one of these operations.
+      await assertInvariants(token, holders, initialSupply, `seed=${SEED} step=${i}`);
+    }
+
+    expect(await token.totalSupply()).to.equal(initialSupply);
+  });
+
+  // -------------------------------------------------------------------------
+  it("Invariant 2: balances always sum to total supply, including across tax-wallet rotation", async function () {
+    const { token, owner, taxWallet, players, holders } = await loadFixture(deployInvariantFixture);
+    const SEED = 0x5eed42;
+    const rng = makeRng(SEED);
+    const initialSupply = await token.totalSupply();
+
+    // Rotating the tax wallet mid-run is the sharpest test of conservation:
+    // fees must follow the new destination with nothing stranded or duplicated.
+    for (let i = 0; i < 45; i++) {
+      const from = pick(rng, players);
+      const to = pick(rng, [...players, owner, taxWallet]);
+      const balance = await token.balanceOf(from.address);
+      if (balance === 0n) continue;
+
+      const roll = rng();
+      try {
+        if (roll < 0.7) {
+          await token.connect(from).transfer(to.address, randBig(rng, balance));
+        } else if (roll < 0.85) {
+          // Point the tax at a different address, then keep transferring.
+          const newWallet = pick(rng, players);
+          const current = await token.taxWallet();
+          if (current.toLowerCase() !== newWallet.address.toLowerCase()) {
+            await token.connect(owner).setTaxWallet(newWallet.address);
+          }
+        } else {
+          // Self-transfer: the edge case where from === to.
+          await token.connect(from).transfer(from.address, randBig(rng, balance));
+        }
+      } catch (err) {
+        if (!isExpectedRevert(err)) {
+          throw new Error(`seed=${SEED} step=${i} unexpected revert: ${err.message}`);
+        }
+      }
+
+      await assertInvariants(token, holders, initialSupply, `seed=${SEED} step=${i}`);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  it("Invariant 3: tax rate can never exceed MAX_TAX_BPS on any path", async function () {
+    const { token, owner, players, holders } = await loadFixture(deployInvariantFixture);
+    const SEED = 0xbadbad;
+    const rng = makeRng(SEED);
+    const initialSupply = await token.totalSupply();
+    const cap = await token.MAX_TAX_BPS();
+
+    // Candidates spanning the legal range, the exact boundary, and pathological
+    // values including a full 100% honeypot and uint256 max.
+    const candidates = [
+      0n,
+      1n,
+      cap - 1n,
+      cap,
+      cap + 1n,
+      501n,
+      1_000n,
+      BPS_DENOMINATOR, // 100% honeypot
+      BPS_DENOMINATOR + 1n,
+      2n ** 128n,
+      2n ** 256n - 1n,
+    ];
+    for (let i = 0; i < 40; i++) {
+      candidates.push(BigInt(Math.floor(rng() * 20_000)));
+    }
+
+    for (const [i, candidate] of candidates.entries()) {
+      const before = await token.taxRateBps();
+      let reverted = false;
+
+      try {
+        await token.connect(owner).setTaxRate(candidate);
+      } catch (err) {
+        reverted = true;
+        if (!isExpectedRevert(err)) {
+          throw new Error(
+            `seed=${SEED} candidate=${candidate} unexpected revert: ${err.message}`
+          );
+        }
+      }
+
+      const after = await token.taxRateBps();
+
+      // The cap holds unconditionally, whether the call succeeded or reverted.
+      expect(after, `candidate=${candidate} breached the cap`).to.be.lte(cap);
+
+      if (candidate > cap) {
+        expect(reverted, `candidate=${candidate} above the cap must revert`).to.equal(true);
+        expect(after, `candidate=${candidate} must leave the rate untouched`).to.equal(before);
+      }
+
+      await assertInvariants(token, holders, initialSupply, `rate-fuzz step=${i}`);
+    }
+
+    // A non-owner can never move the rate, whatever the value.
+    for (const candidate of [0n, 100n, cap, cap + 1n]) {
+      await expect(
+        token.connect(players[0]).setTaxRate(candidate)
+      ).to.be.revertedWithCustomError(token, "OwnableUnauthorizedAccount");
+    }
+    expect(await token.taxRateBps()).to.be.lte(cap);
+  });
+
+  // -------------------------------------------------------------------------
+  it("Invariant 4: burns reduce supply by exactly the burned amount and never mint", async function () {
+    const { token, players, holders } = await loadFixture(deployInvariantFixture);
+    const SEED = 0xf17e;
+    const rng = makeRng(SEED);
+    const startingSupply = await token.totalSupply();
+    let expectedSupply = startingSupply;
+
+    for (let i = 0; i < 30; i++) {
+      const actor = pick(rng, players);
+      const balance = await token.balanceOf(actor.address);
+      if (balance === 0n) continue;
+
+      const roll = rng();
+      try {
+        if (roll < 0.5) {
+          const amount = randBig(rng, balance);
+          await token.connect(actor).burn(amount);
+          // Burns bypass the tax, so supply falls by exactly `amount`.
+          expectedSupply -= amount;
+        } else {
+          const to = pick(rng, players);
+          await token.connect(actor).transfer(to.address, randBig(rng, balance));
+        }
+      } catch (err) {
+        if (!isExpectedRevert(err)) {
+          throw new Error(`seed=${SEED} step=${i} unexpected revert: ${err.message}`);
+        }
+      }
+
+      await assertInvariants(token, holders, expectedSupply, `seed=${SEED} step=${i}`);
+    }
+
+    expect(
+      await token.totalSupply(),
+      "expected at least one burn to have reduced supply"
+    ).to.be.lt(startingSupply);
+  });
+
+  // -------------------------------------------------------------------------
+  it("Invariant 5: the fee never exceeds MAX_TAX_BPS of the transferred value", async function () {
+    const { token, owner, players, one } = await loadFixture(deployInvariantFixture);
+    const SEED = 0xfee5;
+    const rng = makeRng(SEED);
+
+    // The anti-honeypot property stated directly: whatever the rate and
+    // whatever the amount, the recipient keeps at least 95%.
+    for (const rate of [0n, 1n, 200n, 499n, MAX_TAX_BPS]) {
+      const current = await token.taxRateBps();
+      if (rate !== current) await token.connect(owner).setTaxRate(rate);
+
+      for (let i = 0; i < 25; i++) {
+        const from = players[0];
+        const to = players[1];
+        const value = randBig(rng, 10_000n * one);
+
+        const [fee, net] = await token.previewTransfer(from.address, to.address, value);
+
+        expect(fee + net, `fee+net must equal value (rate=${rate}, value=${value})`).to.equal(
+          value
+        );
+        expect(fee, `fee exceeded the cap (rate=${rate}, value=${value})`).to.be.lte(
+          (value * MAX_TAX_BPS) / BPS_DENOMINATOR
+        );
+        expect(
+          net * BPS_DENOMINATOR,
+          `recipient received under 95% (rate=${rate}, value=${value})`
+        ).to.be.gte(value * (BPS_DENOMINATOR - MAX_TAX_BPS));
+      }
+    }
+  });
+});
