@@ -239,7 +239,7 @@ async function guard(button, statusId, label, fn) {
 
 async function loadStaticData() {
   const res = await fetch("./abi/TaxToken.json", { cache: "no-store" });
-  if (!res.ok) throw new Error(`Could not load ABI (HTTP ${res.status}). Run: npm run abi`);
+  if (!res.ok) throw new Error(`Could not load ABI (HTTP ${res.status}). Run: npm run export-abi`);
   state.abi = (await res.json()).abi;
 
   // Optional. Written by scripts/deploy.js; absent before the first deploy.

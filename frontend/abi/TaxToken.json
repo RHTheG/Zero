@@ -1,5 +1,5 @@
 {
-  "_comment": "GENERATED FILE - do not edit. Produced by scripts/export-abi.js from artifacts/contracts/TaxToken.sol/TaxToken.json. Run `npm run abi`.",
+  "_comment": "GENERATED FILE - do not edit. Produced by scripts/export-abi.js from artifacts/contracts/TaxToken.sol/TaxToken.json. Run `npm run export-abi`.",
   "contractName": "TaxToken",
   "abi": [
     {

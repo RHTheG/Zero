@@ -2,7 +2,7 @@
 /**
  * Exports the TaxToken ABI from the Hardhat build artifacts into the frontend.
  *
- *   node scripts/export-abi.js      (or: npm run abi)
+ *   node scripts/export-abi.js      (or: npm run export-abi)
  *
  * The frontend never carries a hand-copied ABI. A stale or hand-edited ABI is a
  * real hazard: encoded calldata silently stops matching the deployed contract,
@@ -48,7 +48,7 @@ function main() {
   const payload = {
     _comment:
       "GENERATED FILE - do not edit. Produced by scripts/export-abi.js from " +
-      "artifacts/contracts/TaxToken.sol/TaxToken.json. Run `npm run abi`.",
+      "artifacts/contracts/TaxToken.sol/TaxToken.json. Run `npm run export-abi`.",
     contractName: artifact.contractName,
     abi: artifact.abi,
   };

@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege. This workflow only ever reads the repository: no package
+# publishing, no OIDC token, no write access to contents. If a step is ever
+# compromised, it cannot push, tag, or open a release.
+permissions:
+  contents: read
+
+# A newer commit on the same ref makes an in-flight run obsolete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Compile, export ABI, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # This job NEVER touches a live network. No RPC URL, no deployer key, no
+    # Etherscan key is referenced, so none can leak from a fork PR or a
+    # compromised dependency. Deployment stays a deliberate local action.
+    env:
+      CI: "true"
+      # Silence Hardhat's telemetry prompt on a non-interactive runner.
+      HARDHAT_DISABLE_TELEMETRY_PROMPT: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      # solc is downloaded on first compile; caching it saves ~30s per run.
+      # Keyed on the compiler config so a version bump busts the cache.
+      - name: Cache Hardhat compilers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/hardhat-nodejs
+          key: hardhat-${{ runner.os }}-${{ hashFiles('hardhat.config.js') }}
+          restore-keys: |
+            hardhat-${{ runner.os }}-
+
+      # `npm ci` installs strictly from package-lock.json and fails if the
+      # lockfile and package.json disagree - reproducible, unlike `npm install`.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile contracts
+        run: npx hardhat compile
+
+      # Run explicitly: `npx hardhat compile` bypasses npm lifecycle hooks, so
+      # the `postcompile` hook that normally regenerates this does not fire here.
+      - name: Export ABI
+        run: npm run export-abi
+
+      # Guards against a stale committed ABI. frontend/abi/TaxToken.json is
+      # tracked and consumed by the dApp at runtime; if it drifts from the
+      # compiled contract, the frontend encodes calldata against the wrong
+      # interface and every call reverts opaquely. artifacts/ and cache/ are
+      # gitignored, so anything showing up here is real drift.
+      - name: Verify no uncommitted drift
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Build output differs from committed files. Run 'npm run compile' locally and commit the result."
+            echo "--- git status ---"
+            git status --porcelain
+            echo "--- diff ---"
+            git --no-pager diff
+            exit 1
+          fi
+          echo "Working tree clean: committed ABI matches the compiled contract."
+
+      # Any failing test exits non-zero, which fails the step and the job.
+      # Deliberately not using mocha --bail: on a red build we want the full
+      # list of failures, not just the first one.
+      - name: Run test suite
+        run: npm test
