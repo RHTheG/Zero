@@ -33,10 +33,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: 22.x
           cache: npm
@@ -44,7 +44,7 @@ jobs:
       # solc is downloaded on first compile; caching it saves ~30s per run.
       # Keyed on the compiler config so a version bump busts the cache.
       - name: Cache Hardhat compilers
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/hardhat-nodejs
           key: hardhat-${{ runner.os }}-${{ hashFiles('hardhat.config.js') }}
