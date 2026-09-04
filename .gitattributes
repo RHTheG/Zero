@@ -1,0 +1,7 @@
+# Normalise line endings so Solidity source hashes are stable across platforms
+# (a CRLF/LF mismatch changes the source hash and breaks Etherscan verification).
+* text=auto eol=lf
+*.sol text eol=lf
+*.js  text eol=lf
+*.json text eol=lf
+*.md  text eol=lf

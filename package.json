@@ -1,0 +1,39 @@
+{
+  "name": "zero-taxtoken",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "TaxToken (TTX) - OpenZeppelin v5 ERC-20 with a capped transfer tax and fee-exclusion allowlist.",
+  "keywords": [
+    "ethereum",
+    "erc20",
+    "solidity",
+    "hardhat",
+    "openzeppelin"
+  ],
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "clean": "hardhat clean",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.js",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "verify:sepolia": "hardhat verify --network sepolia"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.8",
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.12",
+    "@nomicfoundation/hardhat-verify": "^2.0.12",
+    "chai": "^4.5.0",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.4",
+    "hardhat": "^2.22.17"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}

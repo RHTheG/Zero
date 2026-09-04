@@ -1,0 +1,44 @@
+# --- Secrets -----------------------------------------------------------------
+# Never commit a live key. `.env.example` is the only env file that is tracked.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+mnemonic.txt
+
+# --- Dependencies ------------------------------------------------------------
+node_modules/
+.pnp
+.pnp.js
+
+# --- Hardhat build output ----------------------------------------------------
+artifacts/
+cache/
+typechain/
+typechain-types/
+deployments/
+.openzeppelin/
+
+# --- Coverage / gas ----------------------------------------------------------
+coverage/
+coverage.json
+gas-report.txt
+.solcover.js.bak
+
+# --- Logs --------------------------------------------------------------------
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+*.log
+
+# --- Editors / OS ------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
