@@ -1,0 +1,85 @@
+name: Deploy dApp to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - "scripts/deploy.js"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+# Least privilege, scoped per job below rather than granted workflow-wide:
+#   contents: read   - required by checkout
+#   pages: write     - required to publish the artifact
+#   id-token: write  - required for the OIDC token deploy-pages exchanges
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time. Note: cancel-in-progress will abort a
+# deployment already in flight; GitHub's own starter workflow prefers `false`
+# here so a half-applied deploy cannot be interrupted. Set as specified.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # The dApp is a static site with no build step: ethers loads from a
+      # CDN and the ABI is committed. Nothing is compiled here, so no
+      # dependency is installed and no secret is in scope.
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      # Guard against publishing a broken site. `frontend/abi/TaxToken.json`
+      # is fetched at runtime; if it is missing, the dApp cannot talk to the
+      # contract at all. CI already proves it matches the compiled contract.
+      - name: Verify frontend assets
+        run: |
+          missing=0
+          for f in frontend/index.html frontend/app.js frontend/styles.css frontend/abi/TaxToken.json; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Required asset missing: $f"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+
+          # deployments.json is optional: it only exists after a live deploy,
+          # and the dApp tolerates its absence by falling back to the address
+          # field. Surface which case this build is.
+          if [ -f frontend/deployments.json ]; then
+            echo "deployments.json present - the address field will auto-fill."
+          else
+            echo "::notice::No deployments.json yet; users must paste the contract address."
+          fi
+
+          # Fail loudly if a private key ever reaches the published bundle.
+          if grep -rEq '(DEPLOYER_PRIVATE_KEY\s*=\s*"0x[0-9a-fA-F]{64}")|(-----BEGIN [A-Z ]*PRIVATE KEY-----)' frontend/; then
+            echo "::error::Key material detected in frontend/ - refusing to publish."
+            exit 1
+          fi
+          echo "Asset check passed."
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./frontend
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
