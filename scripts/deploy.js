@@ -53,7 +53,11 @@ async function main() {
   console.log(`  Chain ID  : ${chainId}`);
   console.log(`  Balance   : ${ethers.formatEther(balance)} ETH`);
 
-  const isLocal = chainId === 31337n;
+  // Local detection is belt-and-braces: match on the network NAME (covers
+  // `--network localhost` pointed at a non-standard chain id) and on the
+  // default in-process chain id (covers an unnamed/aliased local network).
+  const LOCAL_NETWORKS = new Set(["hardhat", "localhost"]);
+  const isLocal = LOCAL_NETWORKS.has(network.name) || chainId === 31337n;
 
   if (!isLocal && balance < MIN_BALANCE_WEI) {
     fail(
@@ -105,15 +109,29 @@ async function main() {
   console.log("-".repeat(68));
 
   // --- Deploy ---------------------------------------------------------------
-  const TaxToken = await ethers.getContractFactory("TaxToken");
-  const token = await TaxToken.deploy(
+  // SINGLE SOURCE OF TRUTH for the constructor arguments.
+  //
+  // Etherscan verification re-compiles the source and ABI-encodes these values,
+  // then byte-compares the result against the on-chain deployment bytecode. Any
+  // drift between what is deployed and what is submitted for verification fails
+  // with an opaque "constructor arguments do not match" error, so the same array
+  // is spread into `deploy()` and handed to `verify:verify` below. Do not
+  // duplicate this list.
+  //
+  // Order MUST match TaxToken.sol exactly:
+  //   (name_, symbol_, initialSupply_, initialOwner_, taxWallet_, taxRateBps_)
+  // `initialSupply_` is WHOLE TOKENS - the contract scales it by 10**decimals().
+  const constructorArgs = [
     NAME,
     SYMBOL,
     INITIAL_SUPPLY,
     owner,
     taxWallet,
-    TAX_RATE_BPS
-  );
+    TAX_RATE_BPS,
+  ];
+
+  const TaxToken = await ethers.getContractFactory("TaxToken");
+  const token = await TaxToken.deploy(...constructorArgs);
 
   console.log(`  tx sent: ${token.deploymentTransaction()?.hash}`);
   console.log("  waiting for confirmation...");
@@ -155,35 +173,55 @@ async function main() {
   }
   console.log("    -> all parameters match the requested configuration.\n");
 
-  // --- Etherscan verification ----------------------------------------------
-  if (!isLocal && process.env.ETHERSCAN_API_KEY) {
-    const confirmations = 5;
-    console.log(`  Waiting ${confirmations} confirmations before verifying...`);
-    await token.deploymentTransaction()?.wait(confirmations);
+  // --- Confirmations + Etherscan verification ------------------------------
+  // Both are skipped on a local chain: there is no explorer to index against,
+  // and `wait(CONFIRMATIONS)` would stall on an in-process network that only
+  // mines on demand.
+  if (isLocal) {
+    console.log(`  Local network (${network.name}) - skipping confirmations and verification.\n`);
+  } else {
+    // Etherscan indexes from confirmed blocks. Verifying too early returns
+    // "contract not found" even though the deployment succeeded, so settle
+    // first. This wait is unconditional on live networks: it also protects
+    // against a shallow reorg silently orphaning the deployment.
+    const CONFIRMATIONS = 5;
+    console.log(`  Waiting ${CONFIRMATIONS} confirmations...`);
+    await token.deploymentTransaction()?.wait(CONFIRMATIONS);
+    console.log(`  ${CONFIRMATIONS} confirmations reached.`);
 
-    try {
-      await run("verify:verify", {
-        address,
-        constructorArguments: [
-          NAME,
-          SYMBOL,
-          INITIAL_SUPPLY,
-          owner,
-          taxWallet,
-          TAX_RATE_BPS,
-        ],
-      });
-      console.log("  Source verified on Etherscan.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.toLowerCase().includes("already verified")) {
-        console.log("  Source already verified.");
-      } else {
-        console.warn(`  Verification failed (contract is still deployed): ${message}`);
+    if (!process.env.ETHERSCAN_API_KEY) {
+      // Not fatal. The contract is live and correct; only the source listing
+      // is missing, and it can be published at any time after the fact.
+      console.warn(
+        "\n  ETHERSCAN_API_KEY is not set - skipping source verification.\n" +
+          "  The deployment SUCCEEDED. Verify later with:\n" +
+          `    npx hardhat verify --network ${network.name} ${address} \\\n` +
+          `      ${constructorArgs.map((a) => JSON.stringify(String(a))).join(" ")}\n`
+      );
+    } else {
+      console.log("  Submitting source for verification...");
+      try {
+        await run("verify:verify", { address, constructorArguments: constructorArgs });
+        console.log("  Source verified on Etherscan.");
+      } catch (error) {
+        // Verification failure must NEVER mask a successful deployment - the
+        // address above is the operator's only record of it. Log and continue.
+        const message = error instanceof Error ? error.message : String(error);
+
+        if (message.toLowerCase().includes("already verified")) {
+          console.log("  Source already verified.");
+        } else {
+          console.warn(
+            `\n  VERIFICATION FAILED: ${message}\n` +
+              `  The deployment SUCCEEDED and the contract is live at ${address}.\n` +
+              "  Common causes: bad/missing API key, explorer lag, constructor-arg drift.\n" +
+              "  Retry with:\n" +
+              `    npx hardhat verify --network ${network.name} ${address} \\\n` +
+              `      ${constructorArgs.map((a) => JSON.stringify(String(a))).join(" ")}\n`
+          );
+        }
       }
     }
-  } else if (!isLocal) {
-    console.log("  ETHERSCAN_API_KEY unset - skipping source verification.");
   }
 
   console.log("=".repeat(68));

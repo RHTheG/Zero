@@ -56,10 +56,11 @@ module.exports = {
     },
   },
 
+  // Read from the environment only - never inline a key here, this file is
+  // tracked. A single string (rather than a per-network map) matches the
+  // Etherscan V2 API, where one key covers every supported chain.
   etherscan: {
-    apiKey: {
-      sepolia: ETHERSCAN_API_KEY || "",
-    },
+    apiKey: ETHERSCAN_API_KEY || "",
   },
 
   sourcify: {
