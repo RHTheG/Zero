@@ -1,0 +1,282 @@
+/* TaxToken dApp — no framework, no build step. */
+
+:root {
+  --bg: #0b0e14;
+  --panel: #131823;
+  --panel-2: #1a2130;
+  --line: #252d3d;
+  --text: #e6e9ef;
+  --muted: #8b94a7;
+  --accent: #5b8cff;
+  --accent-ink: #ffffff;
+  --ok: #3fbf7f;
+  --warn: #e0a437;
+  --err: #f2555a;
+  --radius: 12px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f6fa;
+    --panel: #ffffff;
+    --panel-2: #f0f3f8;
+    --line: #dde3ec;
+    --text: #161c26;
+    --muted: #5f6a7d;
+    --accent: #2f6bff;
+  }
+}
+
+* { box-sizing: border-box; }
+
+/* The UA sheet's `[hidden] { display: none }` is a single attribute selector,
+   so any class that sets `display` (.pill, .banner) outranks it and the element
+   stays visible despite the attribute. Force it. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 20px 64px;
+}
+
+/* ---------------- Header ---------------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: linear-gradient(140deg, var(--accent), #8b5bff);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+h1 { margin: 0; font-size: 19px; letter-spacing: -0.01em; }
+.brand-sub { margin: 1px 0 0; color: var(--muted); font-size: 12.5px; }
+
+.wallet-box { display: flex; align-items: center; gap: 10px; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.pill-ok .dot { background: var(--ok); }
+.pill-warn .dot { background: var(--warn); }
+.pill-warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+
+/* ---------------- Cards ---------------- */
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 14px;
+}
+
+.card-admin { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.card h2 { margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.card h3 { margin: 0 0 10px; font-size: 14px; }
+
+.hint { color: var(--muted); font-size: 12px; }
+.rule { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
+
+/* ---------------- Fields ---------------- */
+
+.field { margin-bottom: 12px; }
+.field label { display: block; margin-bottom: 5px; font-size: 12.5px; color: var(--muted); }
+
+input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 13.5px;
+}
+
+input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+input::placeholder { color: var(--muted); opacity: 0.65; }
+input[aria-invalid="true"] { border-color: var(--err); }
+
+.field-row { display: flex; gap: 9px; align-items: flex-end; }
+.field-row .field { margin-bottom: 0; }
+.grow { flex: 1; min-width: 0; }
+
+/* ---------------- Buttons ---------------- */
+
+.btn {
+  padding: 10px 15px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter 0.12s ease, opacity 0.12s ease;
+}
+
+.btn:hover:not(:disabled) { filter: brightness(1.18); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-ghost { background: transparent; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-block { width: 100%; margin-top: 14px; }
+.btn-row { display: flex; gap: 9px; }
+.btn-row .btn { flex: 1; }
+
+/* ---------------- Token grid ---------------- */
+
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 11px; margin: 0; }
+.stat { background: var(--panel-2); border-radius: 9px; padding: 11px 13px; min-width: 0; }
+.stat.wide { grid-column: 1 / -1; }
+.stat dt { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+.stat dd { margin: 4px 0 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+
+.mono { font-family: var(--mono); font-size: 12.5px; font-weight: 500; }
+
+/* ---------------- Balance ---------------- */
+
+.balance { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.balance-sym { font-size: 15px; font-weight: 500; color: var(--muted); }
+
+/* ---------------- Preview ---------------- */
+
+.preview {
+  background: var(--panel-2);
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  padding: 12px 13px;
+  margin-top: 4px;
+}
+
+.preview-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 13.5px; }
+.preview-row span:first-child { color: var(--muted); }
+.strong { font-weight: 700; }
+.preview-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+
+/* ---------------- Badges / status ---------------- */
+
+.badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent);
+  color: var(--ok);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.badge-owner {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
+.status { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); min-height: 1.2em; overflow-wrap: anywhere; }
+.status-err { color: var(--err); }
+.status-ok { color: var(--ok); }
+
+/* ---------------- Banner ---------------- */
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-radius: 9px;
+  margin-bottom: 14px;
+  font-size: 13.5px;
+  background: color-mix(in srgb, var(--warn) 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  color: var(--text);
+}
+
+.banner-err {
+  background: color-mix(in srgb, var(--err) 14%, var(--panel));
+  border-color: color-mix(in srgb, var(--err) 45%, transparent);
+}
+
+/* ---------------- Log ---------------- */
+
+.log { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+
+.log li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+
+.log li:last-child { border-bottom: 0; }
+.log-empty { color: var(--muted); }
+.log-time { color: var(--muted); font-family: var(--mono); font-size: 11.5px; flex-shrink: 0; }
+.log-err { color: var(--err); }
+.log-ok { color: var(--ok); }
+.log a { color: var(--accent); }
+
+/* ---------------- Footer ---------------- */
+
+.foot { margin-top: 22px; text-align: center; }
+.foot p { color: var(--muted); font-size: 12px; margin: 0; }
+
+@media (max-width: 560px) {
+  .grid { grid-template-columns: 1fr; }
+  .topbar { align-items: flex-start; }
+  .wallet-box { width: 100%; justify-content: space-between; }
+}

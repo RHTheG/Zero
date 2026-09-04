@@ -173,6 +173,36 @@ async function main() {
   }
   console.log("    -> all parameters match the requested configuration.\n");
 
+  // --- Publish the address to the frontend ---------------------------------
+  // The dApp reads this instead of hardcoding an address. Local chains are
+  // skipped: a 31337 address is ephemeral and would only churn the file.
+  if (!isLocal) {
+    try {
+      const fs = require("node:fs");
+      const path = require("node:path");
+      const file = path.resolve(__dirname, "..", "frontend", "deployments.json");
+
+      const existing = fs.existsSync(file)
+        ? JSON.parse(fs.readFileSync(file, "utf8"))
+        : {};
+
+      existing[chainId.toString()] = {
+        network: network.name,
+        address,
+        deployer: deployer.address,
+        blockNumber: token.deploymentTransaction()?.blockNumber ?? null,
+        deployedAt: new Date().toISOString(),
+      };
+
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, `${JSON.stringify(existing, null, 2)}\n`, "utf8");
+      console.log(`  Address written to frontend/deployments.json (chain ${chainId}).`);
+    } catch (error) {
+      // Never fail a successful deployment over a bookkeeping file.
+      console.warn(`  Could not update frontend/deployments.json: ${error.message}`);
+    }
+  }
+
   // --- Confirmations + Etherscan verification ------------------------------
   // Both are skipped on a local chain: there is no explorer to index against,
   // and `wait(CONFIRMATIONS)` would stall on an in-process network that only

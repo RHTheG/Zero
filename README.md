@@ -143,9 +143,17 @@ A holder can always sell, and always receives at least 95% of any transfer.
 ├── contracts/
 │   └── TaxToken.sol          # the token; overrides _update() only
 ├── scripts/
-│   └── deploy.js             # Sepolia deploy + preflight + post-deploy assertions
+│   ├── deploy.js             # deploy + preflight + post-deploy assertions + verify
+│   ├── export-abi.js         # artifacts -> frontend/abi (runs on postcompile)
+│   └── serve-frontend.js     # zero-dependency static server, 127.0.0.1 only
 ├── test/
 │   └── TaxToken.test.js      # unit tests
+├── frontend/                 # vanilla-JS dApp, no build step
+│   ├── index.html
+│   ├── app.js
+│   ├── styles.css
+│   ├── abi/TaxToken.json     # GENERATED - do not edit
+│   └── deployments.json      # written by deploy.js on live networks
 ├── hardhat.config.js
 ├── .env.example              # template; copy to .env (git-ignored)
 └── .gitignore
@@ -184,6 +192,59 @@ underfunded, if `TAX_WALLET` is unset or invalid on a live network, or if the
 requested rate exceeds the 5% cap. After deployment it reads the contract back
 and asserts every parameter matches what was requested. If `ETHERSCAN_API_KEY`
 is set, it waits 5 confirmations and verifies the source.
+
+---
+
+## Frontend (dApp)
+
+A single-page interface for the token. Vanilla JS, no framework, no build step —
+`ethers` is the only dependency and it loads from a CDN.
+
+```bash
+npm run compile      # also regenerates frontend/abi/TaxToken.json
+npm run frontend     # http://127.0.0.1:5173
+```
+
+Then connect MetaMask and paste the deployed address (auto-filled on networks
+present in `deployments.json`, and remembered per-chain thereafter).
+
+**Features**
+
+- **Wallet** — EIP-1193 connect, address and network pill (Sepolia / Localhost),
+  live `accountsChanged` and `chainChanged` handling, and a one-click switch
+  prompt on an unsupported chain.
+- **Token** — name, symbol, total supply, current tax rate (% and bps), tax
+  wallet, owner.
+- **Balance & transfer** — your balance, a `Max` button, and a **live tax
+  preview** read from the contract's own `previewTransfer(from, to, amount)`
+  before you sign. The fee is never recomputed in JavaScript, so the preview
+  cannot drift from `_update()`.
+- **Admin (owner only)** — set the tax rate, with the 5% cap read from
+  `MAX_TAX_BPS()` and enforced client-side before a transaction is sent; toggle
+  fee exclusion for any address, showing its current status first.
+
+**Security choices**
+
+- **Nothing is hardcoded.** The ABI is generated from the Hardhat artifacts by
+  `scripts/export-abi.js` (never hand-copied, and bytecode is deliberately
+  excluded). The contract address comes from `deployments.json` or the address
+  field. No private key is ever handled by the page.
+- **`ethers` is version-pinned with Subresource Integrity.** The SRI hash was
+  computed from the local `node_modules` build and verified byte-identical to
+  the CDN copy. A tampered CDN file will not execute.
+- **The dev server binds `127.0.0.1` only**, never `0.0.0.0`, and refuses path
+  traversal outside `frontend/`.
+- **Owner gating is UI convenience only.** `onlyOwner` is enforced on-chain
+  regardless of what the page renders.
+- All rendering goes through `textContent`, never `innerHTML`.
+- Token amounts stay `BigInt` end-to-end; no float arithmetic touches a balance.
+
+**Error handling** — wallet rejection (`ACTION_REJECTED` / 4001), a pending
+wallet request (`-32002`), wrong network, insufficient ETH for gas, insufficient
+token balance (caught before signing), invalid addresses, over-precision
+amounts, and an address that holds no contract on the current chain. Contract
+custom errors are decoded through the ABI, so a revert reads as
+`Tax rate 600 bps exceeds the hard cap of 500 bps.` rather than a hex blob.
 
 ---
 

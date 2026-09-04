@@ -13,6 +13,9 @@
   ],
   "scripts": {
     "compile": "hardhat compile",
+    "postcompile": "node scripts/export-abi.js",
+    "abi": "node scripts/export-abi.js",
+    "frontend": "node scripts/serve-frontend.js",
     "test": "hardhat test",
     "clean": "hardhat clean",
     "node": "hardhat node",

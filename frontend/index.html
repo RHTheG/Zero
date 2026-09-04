@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TaxToken (TTX) — dApp</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#129689;</text></svg>"
+    />
+
+    <!--
+      ethers v6 UMD, version-pinned with Subresource Integrity.
+
+      The hash was computed from the local node_modules build and verified to be
+      byte-identical to what the CDN serves. If the CDN is ever compromised or
+      the file is swapped, the browser refuses to execute it rather than running
+      attacker-controlled code against a connected wallet.
+    -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/ethers@6.17.0/dist/ethers.umd.min.js"
+      integrity="sha384-lApM4ELRuFNT7NgNqnXB2zFWgSDdhVvmnOHov2DPJz/2zuNpZImXBeklFr18ilvi"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <!-- ================= Header ================= -->
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">TTX</span>
+          <div>
+            <h1>TaxToken</h1>
+            <p class="brand-sub">ERC-20 with a capped transfer tax</p>
+          </div>
+        </div>
+
+        <div class="wallet-box">
+          <div id="network-pill" class="pill pill-idle" hidden>
+            <span class="dot" aria-hidden="true"></span>
+            <span id="network-name">—</span>
+          </div>
+          <button id="btn-connect" class="btn btn-primary" type="button">
+            Connect Wallet
+          </button>
+        </div>
+      </header>
+
+      <!-- ================= Global banners ================= -->
+      <div id="banner" class="banner" hidden role="alert" aria-live="assertive">
+        <span id="banner-text"></span>
+        <button id="banner-action" class="btn btn-ghost btn-sm" type="button" hidden></button>
+      </div>
+
+      <!-- ================= Contract address ================= -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Contract</h2>
+          <span class="hint">Loaded per network — never hardcoded</span>
+        </div>
+
+        <div class="field-row">
+          <div class="field grow">
+            <label for="contract-address">TaxToken address</label>
+            <input
+              id="contract-address"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="0x… (auto-filled from deployments.json when available)"
+            />
+          </div>
+          <button id="btn-load" class="btn" type="button">Load</button>
+        </div>
+        <p id="contract-status" class="status"></p>
+      </section>
+
+      <!-- ================= Token info ================= -->
+      <section id="section-token" class="card" hidden>
+        <div class="card-head">
+          <h2>Token</h2>
+          <button id="btn-refresh" class="btn btn-ghost btn-sm" type="button">Refresh</button>
+        </div>
+
+        <dl class="grid">
+          <div class="stat">
+            <dt>Name</dt>
+            <dd id="t-name">—</dd>
+          </div>
+          <div class="stat">
+            <dt>Symbol</dt>
+            <dd id="t-symbol">—</dd>
+          </div>
+          <div class="stat">
+            <dt>Total supply</dt>
+            <dd id="t-supply">—</dd>
+          </div>
+          <div class="stat">
+            <dt>Tax rate</dt>
+            <dd id="t-tax">—</dd>
+          </div>
+          <div class="stat wide">
+            <dt>Tax wallet</dt>
+            <dd id="t-taxwallet" class="mono">—</dd>
+          </div>
+          <div class="stat wide">
+            <dt>Owner</dt>
+            <dd id="t-owner" class="mono">—</dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- ================= Balance + transfer ================= -->
+      <section id="section-wallet" class="card" hidden>
+        <div class="card-head">
+          <h2>Your balance</h2>
+          <span id="fee-status" class="badge" hidden>fee-excluded</span>
+        </div>
+
+        <p class="balance"><span id="u-balance">—</span> <span class="balance-sym">TTX</span></p>
+
+        <hr class="rule" />
+
+        <h3>Transfer</h3>
+        <div class="field">
+          <label for="to-address">Recipient</label>
+          <input
+            id="to-address"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="0x…"
+          />
+        </div>
+
+        <div class="field">
+          <label for="amount">Amount (TTX)</label>
+          <div class="field-row">
+            <input
+              id="amount"
+              class="grow"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              placeholder="0.0"
+            />
+            <button id="btn-max" class="btn btn-ghost" type="button">Max</button>
+          </div>
+        </div>
+
+        <!-- Live preview, read straight from previewTransfer() on-chain -->
+        <div id="preview" class="preview" hidden>
+          <div class="preview-row">
+            <span>Tax</span>
+            <span id="p-fee" class="mono">—</span>
+          </div>
+          <div class="preview-row">
+            <span>Recipient receives</span>
+            <span id="p-net" class="mono strong">—</span>
+          </div>
+          <p id="p-note" class="preview-note"></p>
+        </div>
+
+        <button id="btn-transfer" class="btn btn-primary btn-block" type="button" disabled>
+          Transfer
+        </button>
+      </section>
+
+      <!-- ================= Admin (owner only) ================= -->
+      <section id="section-admin" class="card card-admin" hidden>
+        <div class="card-head">
+          <h2>Admin</h2>
+          <span class="badge badge-owner">owner</span>
+        </div>
+
+        <h3>Tax rate</h3>
+        <div class="field-row">
+          <div class="field grow">
+            <label for="new-rate">New rate (%) — max <span id="cap-label">5</span>%</label>
+            <input
+              id="new-rate"
+              type="number"
+              min="0"
+              max="5"
+              step="0.01"
+              autocomplete="off"
+              placeholder="2.00"
+            />
+          </div>
+          <button id="btn-set-rate" class="btn" type="button">Update</button>
+        </div>
+        <p id="rate-status" class="status"></p>
+
+        <hr class="rule" />
+
+        <h3>Fee exclusion</h3>
+        <div class="field">
+          <label for="excl-address">Address</label>
+          <input
+            id="excl-address"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="0x…"
+          />
+        </div>
+        <p id="excl-current" class="status"></p>
+        <div class="btn-row">
+          <button id="btn-excl-on" class="btn" type="button">Exclude</button>
+          <button id="btn-excl-off" class="btn" type="button">Include</button>
+        </div>
+      </section>
+
+      <!-- ================= Activity log ================= -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Activity</h2>
+          <button id="btn-clear-log" class="btn btn-ghost btn-sm" type="button">Clear</button>
+        </div>
+        <ul id="log" class="log" aria-live="polite">
+          <li class="log-empty">No activity yet.</li>
+        </ul>
+      </section>
+
+      <footer class="foot">
+        <p>
+          Unaudited contract. Testnet use only. Read-only calls run against your
+          wallet's provider; nothing is sent anywhere else.
+        </p>
+      </footer>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
