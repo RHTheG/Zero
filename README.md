@@ -248,6 +248,42 @@ custom errors are decoded through the ABI, so a revert reads as
 
 ---
 
+## Static analysis
+
+Slither runs on every push and pull request as a separate CI job, in parallel
+with the tests, so a security finding and a failing test are independent
+signals rather than one masking the other.
+
+**Policy:** `fail-on: medium` — any medium or high severity finding fails the
+build. Informational, low and optimization results are printed in the job log
+but do not block.
+
+`slither.config.json` deliberately carries no comments: Slither logs every
+unrecognised key, which floods the CI output. The rationale lives here instead.
+
+| Setting | Why |
+| --- | --- |
+| `filter_paths: node_modules` | OpenZeppelin v5 is widely audited and not vendor-patched here. Its findings are unactionable without forking the library. |
+| `exclude_informational`, `exclude_low`, `exclude_optimization` | Reported, but not merge-blocking. |
+| `exclude_medium: false`, `exclude_high: false` | Explicitly **not** excluded — these are the ones that fail the build. |
+| `detectors_to_exclude: naming-convention` | Constructor parameters use the trailing-underscore style (`name_`, `symbol_`) to disambiguate from the ERC20 getters they feed. OpenZeppelin house style, a deliberate readability choice. |
+| `detectors_to_exclude: solc-version` | The compiler is pinned to an exact `0.8.24` rather than a floating caret range. Slither flags non-latest pins; an exact pin is the stronger supply-chain position, so the flag runs contrary to intent. |
+
+Nothing that could mask a real vulnerability in `TaxToken.sol` is excluded.
+Current status: **10 contracts, 57 detectors, 0 findings.**
+
+### Dependency advisories
+
+`npm audit` reports advisories in the Hardhat toolchain (`adm-zip`, `tmp`,
+`undici`, `serialize-javascript`, `@ethersproject/abi`, `ethereumjs-util`).
+All of them are **devDependencies** — build and test tooling. The only
+production dependency is `@openzeppelin/contracts`, which ships Solidity
+source, not JavaScript. None of these advisories reach the deployed contract or
+the published frontend, which loads a version-pinned, SRI-verified `ethers`
+bundle and nothing else.
+
+---
+
 ## Test coverage
 
 `npm test` exercises:
