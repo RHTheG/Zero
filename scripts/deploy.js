@@ -37,6 +37,20 @@ async function main() {
   console.log(`  Deploying ${NAME} (${SYMBOL}) -> network: ${network.name}`);
   console.log("=".repeat(68));
 
+  // --- Network config -------------------------------------------------------
+  // Checked BEFORE touching the provider. `ethers.getSigners()` needs a live
+  // RPC URL, so an unset SEPOLIA_RPC_URL surfaces as Hardhat's opaque
+  // "HH117: Empty string `` for network or forking URL" instead of anything
+  // actionable. Fail here with the actual remedy.
+  const configuredUrl = network.config && network.config.url;
+  if (network.name !== "hardhat" && !configuredUrl) {
+    fail(
+      `No RPC URL configured for network "${network.name}". ` +
+        `Set SEPOLIA_RPC_URL in .env (see .env.example). ` +
+        `If .env does not exist yet: cp .env.example .env`
+    );
+  }
+
   // --- Signer ---------------------------------------------------------------
   const signers = await ethers.getSigners();
   if (signers.length === 0) {
