@@ -56,6 +56,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Production dependencies only. `--omit=dev` scopes the audit to what
+      # actually ships (@openzeppelin/contracts), so advisories in the Hardhat
+      # build toolchain - which never reach the deployed contract or the
+      # published frontend - cannot block a merge.
+      #
+      # This step IS blocking: the production tree is a single package, so a
+      # high-severity finding here is a real signal about code that ends up
+      # on-chain, not toolchain noise. If it ever fires, read it rather than
+      # bypassing it.
+      #
+      # Note this audits the JS package tree. It says nothing about the
+      # Solidity in contracts/ - that is Slither's job, in the parallel job
+      # below.
+      - name: Audit production dependencies
+        run: npm audit --audit-level=high --omit=dev
+
       - name: Compile contracts
         run: npx hardhat compile
 
